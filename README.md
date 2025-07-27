@@ -1,7 +1,14 @@
-##Challenge 1a: PDF Processing Solution
+# PDF Heading Extractor - Challenge 1a
 
 ## Overview
-This is a machine learning pipeline designed to automatically identify and classify structural headings (such as Title, Section, Subsection, and Subsubsection) from PDF documents, with a particular strength in processing research papers. The system leverages a robust dataset curated from arXiv, ensuring high accuracy and reliability for academic and scientific documents.
+This is a machine learning pipeline designed to automatically identify and classify structural headings (Title, H1, H2, H3) from PDF documents, with a particular strength in processing research papers. The system leverages a robust dataset curated from arXiv, ensuring high accuracy and reliability for academic and scientific documents.
+
+## Docker Solution
+This solution is packaged as a Docker container that:
+- Processes all PDFs in `/app/input` directory automatically
+- Extracts titles and headings with page numbers
+- Outputs structured JSON files to `/app/output` directory
+- Works completely offline with no internet access required
 
 ---
 
@@ -60,7 +67,68 @@ The final model demonstrates strong and consistent performance across all sectio
 ---
 
 ## 7. How to Use
-1. **Classify Headings**: Run the PDF parsing and classification script to extract and label headings from new PDF files.
-2. **Analyze Output**: Use the structured JSON output for further document analysis or integration into other systems.
+
+### Building the Docker Image
+```bash
+docker build --platform linux/amd64 -t pdf-heading-extractor:latest .
+```
+
+### Running the Solution
+The solution expects to be run with volume mounts for input and output directories:
+
+```bash
+docker run --rm \
+  -v $(pwd)/input:/app/input \
+  -v $(pwd)/output:/app/output \
+  --network none \
+  pdf-heading-extractor:latest
+```
+
+### Expected Directory Structure
+```
+your-project/
+├── input/
+│   ├── document1.pdf
+│   ├── document2.pdf
+│   └── ...
+└── output/
+    ├── document1.json
+    ├── document2.json
+    └── ...
+```
+
+### Output Format
+For each input PDF, the solution generates a JSON file with the following structure:
+
+```json
+{
+  "title": "Document Title",
+  "outline": [
+    {
+      "level": "H1",
+      "text": "Introduction",
+      "page": 1
+    },
+    {
+      "level": "H2",
+      "text": "Background",
+      "page": 2
+    },
+    {
+      "level": "H3",
+      "text": "Historical Context",
+      "page": 2
+    }
+  ]
+}
+```
+
+## 8. Constraints Met
+
+- **Execution time**: ≤10 seconds for 50-page PDFs
+- **Model size**: ~360KB (trained TF-IDF + Logistic Regression)
+- **Network**: No internet access required
+- **Architecture**: AMD64 compatible
+- **Runtime**: CPU-only, suitable for 8 CPUs and 16GB RAM
 
 ---

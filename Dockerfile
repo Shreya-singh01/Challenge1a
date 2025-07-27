@@ -1,21 +1,23 @@
-# Minimal Dockerfile 
-#
-Usage after cloning:
-  docker build -t Challenge1a .
-  docker run --rm -v "$PWD:/app" Challenge1a <input.pdf> <model.joblib> <output.json>
-#
-# Example:
-#   docker run --rm -v "$PWD:/app" Challenge1a sample.pdf tfidf_heading_classifier.joblib result.json
+FROM --platform=linux/amd64 python:3.10-slim
 
-FROM python:3.10
-
+# Set working directory
 WORKDIR /app
 
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy the main script and model
 COPY parse_pdf_and_classify.py .
 COPY tfidf_heading_classifier.joblib .
 
-ENTRYPOINT ["python", "parse_pdf_and_classify.py"]
-CMD [] 
+# Create input and output directories
+RUN mkdir -p /app/input /app/output
+
+# Set the entry point
+ENTRYPOINT ["python", "parse_pdf_and_classify.py"] 

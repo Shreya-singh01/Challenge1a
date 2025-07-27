@@ -4,6 +4,7 @@ import json
 import sys
 import os
 import re
+from pathlib import Path
 
 # Improved heuristic function for heading detection
 def is_heading(line, font_size=None, is_bold=False, y_pos=None, x_pos=None, width=None, page_width=None):
@@ -101,46 +102,118 @@ def extract_headings_from_pdf(pdf_path):
                     headings.append({'text': line_text, 'page': page_num})
     return headings
 
-def main(pdf_path, model_path, output_json):
-    # 1. Extract headings from PDF
+def extract_title_from_pdf(pdf_path):
+    """Extract title from the first page of the PDF."""
+    try:
+        doc = fitz.open(pdf_path)
+        if len(doc) > 0:
+            first_page = doc[0]
+            # Get text from first page
+            text = first_page.get_text()
+            if text:
+                # Look for title in first few lines
+                lines = text.split('\n')
+                for line in lines[:5]:  # Check first 5 lines
+                    line = line.strip()
+                    if line and len(line) > 3 and len(line) < 200:
+                        # Remove common prefixes and clean up
+                        title = re.sub(r'^[0-9\s\.\-]+', '', line)
+                        title = title.strip()
+                        if title:
+                            return title
+        doc.close()
+    except Exception as e:
+        print(f"Error extracting title from {pdf_path}: {e}")
+    
+    # Fallback: use filename without extension
+    return Path(pdf_path).stem.replace('_', ' ').title()
+
+def process_pdf(pdf_path, model_path):
+    """Process a single PDF and return the structured data."""
+    # Extract title
+    title = extract_title_from_pdf(pdf_path)
+    
+    # Extract headings
     headings = extract_headings_from_pdf(pdf_path)
     if not headings:
-        print('No headings detected.')
-        return
+        print(f'No headings detected in {pdf_path}.')
+        return {
+            "title": title,
+            "outline": []
+        }
 
-    # 2. Load the trained model
+    # Load the trained model
     model = joblib.load(model_path)
 
-    # 3. Classify headings
+    # Classify headings
     texts = [h['text'] for h in headings]
-    print(texts)
     levels = model.predict(texts)
 
-    # 4. Prepare output
-    output = []
+    # Prepare output in required format
+    outline = []
     for h, level in zip(headings, levels):
-        output.append({
+        outline.append({
+            'level': level,
             'text': h['text'],
-            'page': h['page'],
-            'level': level
+            'page': h['page']
         })
 
-    # 5. Write to JSON
-    with open(output_json, 'w', encoding='utf-8') as f:
-        json.dump(output, f, indent=2, ensure_ascii=False)
-    print(f'Output written to {output_json}')
+    return {
+        "title": title,
+        "outline": outline
+    }
+
+def process_all_pdfs():
+    """Process all PDFs in the input directory."""
+    # Check if running in Docker (absolute paths) or locally (relative paths)
+    if os.path.exists("/app/input"):
+        # Running in Docker
+        input_dir = "/app/input"
+        output_dir = "/app/output"
+        model_path = "/app/tfidf_heading_classifier.joblib"
+    else:
+        # Running locally
+        input_dir = "app/input"
+        output_dir = "app/output"
+        model_path = "tfidf_heading_classifier.joblib"
+    
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
+    
+    # Ensure output directory exists
+    output_path.mkdir(exist_ok=True)
+    
+    # Find all PDF files
+    pdf_files = list(input_path.glob("*.pdf"))
+    
+    if not pdf_files:
+        print(f"No PDF files found in {input_dir}")
+        return
+    
+    print(f"Found {len(pdf_files)} PDF file(s) to process")
+    
+    for pdf_file in pdf_files:
+        print(f"Processing: {pdf_file.name}")
+        
+        try:
+            # Process the PDF
+            result = process_pdf(str(pdf_file), model_path)
+            
+            # Create output filename
+            output_file = output_path / f"{pdf_file.stem}.json"
+            
+            # Write JSON output
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(result, f, indent=2, ensure_ascii=False)
+            
+            print(f"Output written to: {output_file}")
+            
+        except Exception as e:
+            print(f"Error processing {pdf_file.name}: {e}")
+
+def main():
+    """Main entry point."""
+    process_all_pdfs()
 
 if __name__ == '__main__':
-    if len(sys.argv) != 4:
-        print('Usage: python parse_pdf_and_classify.py <input.pdf> <model.joblib> <output.json>')
-        sys.exit(1)
-    pdf_path = sys.argv[1]
-    model_path = sys.argv[2]
-    output_json = sys.argv[3]
-    if not os.path.exists(pdf_path):
-        print(f'PDF file not found: {pdf_path}')
-        sys.exit(1)
-    if not os.path.exists(model_path):
-        print(f'Model file not found: {model_path}')
-        sys.exit(1)
-    main(pdf_path, model_path, output_json)
+    main()
